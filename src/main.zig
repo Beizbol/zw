@@ -1,8 +1,8 @@
 const std = @import("std");
 const httpz = @import("httpz");
 
-const port: u16 = 8998;
-const path = "www";
+const PORT: u16 = 8998;
+const PATH = "www";
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -47,7 +47,7 @@ fn install_exe() !void {
 fn start_server(alloc: std.mem.Allocator) !void {
     var server = try httpz.Server(void).init(
         alloc,
-        .{ .port = port },
+        .{ .port = PORT },
         {},
     );
     defer { // clean shutdown
@@ -56,17 +56,92 @@ fn start_server(alloc: std.mem.Allocator) !void {
     }
 
     var router = server.router(.{});
+
+    router.get("/zw", reload, .{});
     router.get("/*", serve, .{});
 
-    std.debug.print("zw server started at http://localhost:{d}/\n", .{port});
+    std.debug.print("zw server started at http://localhost:{d}/\n", .{PORT});
 
     // blocks
     try server.listen();
 }
 
+fn reload(_: *httpz.Request, res: *httpz.Response) !void {
+    try res.startEventStream(StreamContext{
+        .arena = res.arena,
+    }, StreamContext.handle);
+}
+
+const StreamContext = struct {
+    arena: std.mem.Allocator,
+
+    fn handle(ctx: StreamContext, stream: std.net.Stream) void {
+        // some event loop
+        // std.debug.print("zw sse\n", .{});
+        var root = std.fs.cwd().openDir(PATH, .{ .iterate = true }) catch |err| {
+            std.debug.print("err: {any}\n", .{err});
+            return;
+        };
+        defer root.close();
+
+        var last: i128 = 0;
+        var dirty = false;
+        var first = true;
+        var n: usize = 0;
+        while (true) {
+            dirty = false;
+            // std.debug.print("checking\n", .{});
+            var walker = root.walk(ctx.arena) catch |err| {
+                std.debug.print("err: {any}\n", .{err});
+                return;
+            };
+            defer walker.deinit();
+            while (walker.next() catch return) |entry| {
+                if (entry.kind != .file) continue;
+
+                // std.debug.print("entry: {s}\n", .{entry.path});
+
+                var file = root.openFile(entry.path, .{}) catch |err| {
+                    std.debug.print("open err: {any}\n", .{err});
+                    return;
+                };
+                defer file.close();
+                const info = file.stat() catch |err| {
+                    std.debug.print("stat err: {any}\n", .{err});
+                    return;
+                };
+                if (info.mtime > last) {
+                    last = info.mtime;
+                    dirty = true;
+                }
+            }
+
+            if (first) {
+                first = false;
+            } else if (dirty) {
+                // std.debug.print("reload\n", .{});
+                stream.writeAll("event: reload\ndata: {}\n\n") catch |err| {
+                    std.debug.print("err: {any}\n", .{err});
+                    return;
+                };
+            } else if (n > 15) {
+                // std.debug.print("nop\n", .{});
+                n = 0;
+                stream.writeAll("event: nop\ndata: {}\n\n") catch |err| {
+                    std.debug.print("err: {any}\n", .{err});
+                    return;
+                };
+            } else {
+                n += 1;
+            }
+
+            std.Thread.sleep(std.time.ns_per_ms * 250);
+        }
+    }
+};
+
 fn serve(req: *httpz.Request, res: *httpz.Response) !void {
-    std.debug.print("path: {s}\n", .{req.url.path});
-    var dir = try std.fs.cwd().openDir(path, .{});
+    var dir = try std.fs.cwd().openDir(PATH, .{});
     defer dir.close();
     res.status = 200;
 
@@ -82,7 +157,16 @@ fn serve(req: *httpz.Request, res: *httpz.Response) !void {
         try list.appendSlice(req.url.path[1..]);
         const ext = req.url.path[dot..];
         std.debug.print("ext: {s}\n", .{ext});
-        // if (std.mem.eql(u8, ext, "html")) {}
+        if (std.mem.eql(u8, ext, ".html")) {
+            std.debug.print("path: {s}\n", .{req.url.path});
+            res.header("Content-Type", "text/html");
+        } else if (std.mem.eql(u8, ext, ".css")) {
+            std.debug.print("path: {s}\n", .{req.url.path});
+            res.header("Content-Type", "text/css");
+        } else if (std.mem.eql(u8, ext, ".js")) {
+            std.debug.print("path: {s}\n", .{req.url.path});
+            res.header("Content-Type", "text/javascript");
+        }
         // res.header("Content-Type", "text/html; charset=utf-8");
     } else unreachable;
 
