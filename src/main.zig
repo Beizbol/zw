@@ -9,50 +9,22 @@ pub fn main() !void {
     const allocator = gpa.allocator();
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
-
-    // std.debug.print("args len: {d}\n", .{args.len});
-
-    if (args.len > 2) {
+    if (args.len > 1) {
         std.debug.print("zw: too many args | try: zw\n", .{});
         return;
     }
-
-    // start server
-    if (args.len == 1) {
-        try start_server(allocator);
-        return;
-    }
-
-    // install exe
-    if (std.mem.eql(u8, args[1], "i")) {
-        try install_exe();
-        return;
-    }
-
-    std.debug.print("unknown arg: {s} | try: zw i\n", .{args[1]});
-}
-
-fn install_exe() !void {
-    std.debug.print("installing zw", .{});
-    // Open build directory
-    var build_dir = try std.fs.cwd().openDir("zig-out/bin", .{});
-    defer build_dir.close();
-    // Open install directory
-    var install_dir = try std.fs.cwd().openDir("C:/Users/jakey/.zig", .{});
-    defer install_dir.close();
-    // Copy compiled exe to install
-    try build_dir.copyFile("zw.exe", install_dir, "zw.exe", .{});
+    try start_server(allocator);
 }
 
 const Ctx = struct { last: i128 };
 
-fn start_server(alloc: std.mem.Allocator) !void {
+fn start_server(gpa: std.mem.Allocator) !void {
     var ctx = Ctx{
         .last = std.time.nanoTimestamp(),
     };
 
     var server = try httpz.Server(*Ctx).init(
-        alloc,
+        gpa,
         .{ .port = PORT },
         &ctx,
     );
@@ -128,10 +100,18 @@ fn serve(_: *Ctx, req: *httpz.Request, res: *httpz.Response) !void {
             std.debug.print("path: {s}\n", .{req.url.path});
             res.header("Content-Type", "text/javascript");
         }
+
+        // application/json
+        // image/png
+        // image/svg+xml
+        // image/jpeg
+        // image/webp
+
+        // .weba audio/webm
+        // .webm video/webm
+
         // res.header("Content-Type", "text/html; charset=utf-8");
     } else unreachable;
 
     res.body = try dir.readFileAlloc(req.arena, list.items, 1024 * 1024);
 }
-
-// "zig build -- i" copies the exe to ~/.zig/
