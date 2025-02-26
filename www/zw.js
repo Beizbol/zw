@@ -1,20 +1,15 @@
+const rate_ms = 250
 
-const ev_src = new EventSource("/zw");
-
-ev_src.onerror = (err) => {
-    console.error("eSrc err:", err);
-};
-
-ev_src.addEventListener("reload", () => {
-    console.log("eSrc reload!");
-    document.location.reload(true);
-});
-
-ev_src.addEventListener("nop", () => {
-    console.log("eSrc nop!");
-    // document.location.reload(true);
-});
-
-ev_src.onmessage = (event) => {
-    console.warn("eSrc msg:", event)
-};
+setInterval(async () => {
+    const reply = await fetch("/zw");
+    switch (reply.status) {
+        case 204: // No Changes
+            break;
+        case 200: // OK Refresh
+            document.location.reload(true);
+            break;
+        default:
+            console.log("fetch error:", reply.status, reply.statusText)
+            break;
+    }
+}, rate_ms)

@@ -1,5 +1,5 @@
 # zw
-zig web - light and fast local http server
+zig web - snappy local http server with auto reload
 
 ## Install
 
@@ -36,6 +36,8 @@ sudo reboot
 
 ```bash
 cd path/to/website/
+
+
 
 zw
 ```
