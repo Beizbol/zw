@@ -33,7 +33,7 @@ fn start_server(gpa: std.mem.Allocator) !void {
         server.deinit();
     }
 
-    var router = server.router(.{});
+    var router = try server.router(.{});
 
     router.get("/zw", reload, .{});
     router.get("/*", serve, .{});
