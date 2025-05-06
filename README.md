@@ -37,8 +37,6 @@ sudo reboot
 ```bash
 cd path/to/website/
 
-
-
 zw
 ```
 
